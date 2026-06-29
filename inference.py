@@ -23,16 +23,44 @@ def inference(image_path, model, device):
     model.eval()
 
     # START----------------------------------------------------------
+    # 加载图片并转换为Tensor
+    image = Image.open(image_path).convert('RGB')
 
+    # 应用与训练时相同的预处理（ToTensor会将像素值归一化到[0,1]）
+    transform = ToTensor()
+    image_tensor = transform(image)
+
+    # 增加batch维度：(C, H, W) → (1, C, H, W)
+    image_tensor = image_tensor.unsqueeze(0).to(device)
+
+    # 禁用梯度进行推理
+    with torch.no_grad():
+        output = model(image_tensor)
+
+        # 获取预测类别（输出logits中最大值对应的索引）
+        predicted_class = output.argmax(dim=1).item()
+
+        # 获取各类别的概率（softmax）
+        probabilities = torch.softmax(output, dim=1).squeeze(0)
+
+    # 输出预测结果
+    print(f"\n========== 推理结果 ==========")
+    print(f"输入图片: {image_path}")
+    print(f"预测数字: {predicted_class}")
+    print(f"\n各类别概率:")
+    for i, prob in enumerate(probabilities):
+        bar = "█" * int(prob.item() * 40)
+        print(f"  数字 {i}: {prob.item():.4f}  {bar}")
+    print(f"===============================\n")
     # END------------------------------------------------------------
 
 
 if __name__ == "__main__":
     # 指定图片路径
-    image_path = "./images/test/signs/img_0006.png"
+    image_path = "images/test/signs/img_0115.png"
 
     # 加载训练好的模型
-    model = torch.load('./models/model.pkl')
+    model = torch.load('./models/model.pkl', weights_only=False)
     if torch.cuda.is_available():
         device = torch.device("cuda")
     else:
