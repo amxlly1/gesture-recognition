@@ -399,13 +399,16 @@ function stopCamera() {
 btnStart.addEventListener('click', startCamera);
 btnStop.addEventListener('click', stopCamera);
 
-// ---- 从视频截帧 ----
+// ---- 从视频截帧（ROI中央裁剪，放大手势区域） ----
 function captureFrame() {
     const ctx = cameraCanvas.getContext('2d');
-    // 截取视频中间的正方形区域
-    const size = Math.min(cameraFeed.videoWidth, cameraFeed.videoHeight);
-    const sx = (cameraFeed.videoWidth - size) / 2;
-    const sy = (cameraFeed.videoHeight - size) / 2;
+    const vw = cameraFeed.videoWidth || 480;
+    const vh = cameraFeed.videoHeight || 480;
+    // 取中央 60% 区域作为 ROI（模拟手势在镜头中央的效果，减少背景）
+    const roiRatio = 0.55;
+    const size = Math.min(vw, vh) * roiRatio;
+    const sx = (vw - size) / 2;
+    const sy = (vh - size) / 2;
     ctx.drawImage(cameraFeed, sx, sy, size, size, 0, 0, 64, 64);
     return cameraCanvas.toDataURL('image/jpeg', 0.9);
 }
@@ -422,13 +425,22 @@ async function predict(imageDataUrl) {
 }
 
 function renderResult(data, predEl, confEl, probsEl) {
-    predEl.textContent = data.prediction;
-    confEl.textContent = `置信度 ${data.confidence}%`;
+    if (!data.is_gesture) {
+        predEl.textContent = '❓';
+        predEl.style.color = '#94a3b8';
+        confEl.textContent = `未检测到手势（最高概率 ${data.confidence}% < 60% 阈值）`;
+        confEl.style.color = '#f59e0b';
+    } else {
+        predEl.textContent = data.prediction;
+        predEl.style.color = '';
+        confEl.textContent = `置信度 ${data.confidence}%`;
+        confEl.style.color = '';
+    }
 
     let html = '';
     for (let i = 0; i < 6; i++) {
         const prob = data.probabilities[i] * 100;
-        const isMax = i === data.prediction;
+        const isMax = data.prediction !== null && i === data.prediction && data.is_gesture;
         html += `
             <div class="prob-item${isMax ? ' active' : ''}">
                 <span class="prob-label">${i}</span>
@@ -439,6 +451,13 @@ function renderResult(data, predEl, confEl, probsEl) {
                 </div>
             </div>`;
     }
+    // 添加阈值线
+    html += `<div style="margin-top:8px;font-size:0.75rem;color:#64748b;">
+        ⚡ 熵值: ${data.entropy.toFixed(2)} | 阈值: 70%置信 / 熵&lt;1.20
+        <div style="position:relative;height:3px;background:#334155;margin-top:4px;border-radius:2px;">
+            <div style="position:absolute;left:70%;width:2px;height:3px;background:#f59e0b;border-radius:1px;"></div>
+        </div>
+    </div>`;
     probsEl.innerHTML = html;
 }
 
