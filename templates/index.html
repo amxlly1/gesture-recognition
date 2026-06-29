@@ -55,13 +55,23 @@
             text-align: center; margin-bottom: 32px;
         }
         .header h1 {
-            font-size: 2rem; font-weight: 700;
-            background: linear-gradient(135deg, var(--primary-glow), #a78bfa);
+            font-size: 2.2rem; font-weight: 700;
+            background: linear-gradient(135deg, #818cf8, #c084fc, #6366f1);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            letter-spacing: 2px;
         }
-        .header p { color: var(--text-dim); margin-top: 6px; font-size: 0.95rem; }
+        .header p { color: var(--text-dim); margin-top: 8px; font-size: 0.95rem; }
+        .header .badge-row { display: flex; gap: 10px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
+        .badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 5px 12px; border-radius: 20px;
+            font-size: 0.78rem; font-weight: 600;
+            background: rgba(99,102,241,0.12); color: var(--primary-glow);
+            border: 1px solid rgba(99,102,241,0.2);
+        }
+        .badge.green { background: rgba(34,197,94,0.12); color: #4ade80; border-color: rgba(34,197,94,0.2); }
 
         /* ---- Tab 切换 ---- */
         .tabs {
@@ -250,7 +260,14 @@
     <!-- Header -->
     <div class="header">
         <h1>✋ 手势数字识别</h1>
-        <p>4层CNN · 测试准确率 97.92% | 支持摄像头实时识别 & 上传图片识别</p>
+        <p>基于深度学习的实时手势识别系统 · 支持 0-5 数字手势</p>
+        <div class="badge-row">
+            <span class="badge green">📊 准确率 97.08%</span>
+            <span class="badge">🧠 4层CNN</span>
+            <span class="badge">📷 实时摄像头</span>
+            <span class="badge">🖐️ 手部检测</span>
+            <span class="badge">🖼️ 图片上传</span>
+        </div>
     </div>
 
     <!-- Tab -->
