@@ -428,13 +428,18 @@ function renderResult(data, predEl, confEl, probsEl) {
     if (!data.is_gesture) {
         predEl.textContent = '❓';
         predEl.style.color = '#94a3b8';
-        confEl.textContent = `未检测到手势（最高概率 ${data.confidence}% < 60% 阈值）`;
-        confEl.style.color = '#f59e0b';
+        if (data.hand_detected) {
+            confEl.textContent = `检测到手但不确定（最高概率 ${data.confidence}% < 50% 阈值）`;
+            confEl.style.color = '#f59e0b';
+        } else {
+            confEl.textContent = `未检测到手部 · 请将手放入画面中央`;
+            confEl.style.color = '#ef4444';
+        }
     } else {
         predEl.textContent = data.prediction;
         predEl.style.color = '';
-        confEl.textContent = `置信度 ${data.confidence}%`;
-        confEl.style.color = '';
+        confEl.textContent = `置信度 ${data.confidence}% · 手部已检测`;
+        confEl.style.color = '#22c55e';
     }
 
     let html = '';
@@ -453,7 +458,7 @@ function renderResult(data, predEl, confEl, probsEl) {
     }
     // 添加阈值线
     html += `<div style="margin-top:8px;font-size:0.75rem;color:#64748b;">
-        ⚡ 熵值: ${data.entropy.toFixed(2)} | 阈值: 70%置信 / 熵&lt;1.20
+        ⚡ 熵值: ${data.entropy.toFixed(2)} | 手部: ${data.hand_detected ? '✅' : '❌'} | 阈值: 50%置信 / 熵&lt;1.50
         <div style="position:relative;height:3px;background:#334155;margin-top:4px;border-radius:2px;">
             <div style="position:absolute;left:70%;width:2px;height:3px;background:#f59e0b;border-radius:1px;"></div>
         </div>
