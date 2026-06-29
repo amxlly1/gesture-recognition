@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>手势数字识别 - 实时交互</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --border: #334155;
+            --primary: #6366f1;
+            --primary-glow: #818cf8;
+            --text: #e2e8f0;
+            --text-dim: #94a3b8;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --radius: 16px;
+            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ---- 背景动画 ---- */
+        .bg-particles {
+            position: fixed; inset: 0; z-index: 0; pointer-events: none;
+        }
+        .particle {
+            position: absolute;
+            border-radius: 50%;
+            background: var(--primary);
+            opacity: 0.08;
+            animation: float 8s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-60px) scale(1.4); }
+        }
+
+        /* ---- 布局 ---- */
+        .container {
+            position: relative; z-index: 1;
+            max-width: 1000px; margin: 0 auto; padding: 24px 20px 60px;
+        }
+
+        .header {
+            text-align: center; margin-bottom: 32px;
+        }
+        .header h1 {
+            font-size: 2rem; font-weight: 700;
+            background: linear-gradient(135deg, var(--primary-glow), #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .header p { color: var(--text-dim); margin-top: 6px; font-size: 0.95rem; }
+
+        /* ---- Tab 切换 ---- */
+        .tabs {
+            display: flex; gap: 4px; margin-bottom: 24px;
+            background: var(--surface); border-radius: var(--radius);
+            padding: 4px; border: 1px solid var(--border);
+        }
+        .tab-btn {
+            flex: 1; padding: 12px 20px; border: none; border-radius: 12px;
+            background: transparent; color: var(--text-dim);
+            font-size: 0.95rem; font-weight: 600; cursor: pointer;
+            transition: var(--transition); display: flex; align-items: center;
+            justify-content: center; gap: 8px;
+        }
+        .tab-btn.active {
+            background: var(--primary); color: #fff;
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+        }
+        .tab-btn:hover:not(.active) { color: var(--text); background: rgba(99, 102, 241, 0.1); }
+        .tab-icon { font-size: 1.2rem; }
+
+        /* ---- 面板 ---- */
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        /* ---- 卡片 ---- */
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 24px;
+            transition: var(--transition);
+        }
+        .card:hover { border-color: var(--primary-glow); }
+
+        /* ---- 摄像头区域 ---- */
+        .camera-wrapper {
+            position: relative; border-radius: var(--radius); overflow: hidden;
+            background: #000; aspect-ratio: 1 / 1; max-width: 480px; margin: 0 auto;
+            box-shadow: 0 0 40px rgba(99, 102, 241, 0.15);
+        }
+        #camera-feed {
+            width: 100%; height: 100%; object-fit: cover; display: block;
+        }
+        #camera-canvas { display: none; }
+        .camera-overlay {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            pointer-events: none;
+        }
+        .roi-box {
+            width: 220px; height: 220px;
+            border: 3px dashed rgba(255, 255, 255, 0.6);
+            border-radius: 20px;
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.3);
+        }
+
+        .camera-controls {
+            display: flex; gap: 12px; justify-content: center;
+            margin-top: 16px; flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 12px 24px; border: none; border-radius: 12px;
+            font-size: 0.95rem; font-weight: 600; cursor: pointer;
+            transition: var(--transition); white-space: nowrap;
+        }
+        .btn-primary {
+            background: var(--primary); color: #fff;
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+        }
+        .btn-primary:hover { background: #4f46e5; transform: translateY(-1px); }
+        .btn-outline {
+            background: transparent; color: var(--text);
+            border: 1.5px solid var(--border);
+        }
+        .btn-outline:hover { border-color: var(--primary); color: var(--primary-glow); }
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15); color: var(--danger);
+            border: 1.5px solid rgba(239, 68, 68, 0.3);
+        }
+        .btn-danger:hover { background: rgba(239, 68, 68, 0.25); }
+
+        /* ---- 结果显示 ---- */
+        .result-area {
+            margin-top: 20px; text-align: center;
+        }
+        .prediction-big {
+            font-size: 4rem; font-weight: 800;
+            background: linear-gradient(135deg, #6366f1, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+        }
+        .confidence {
+            font-size: 1.1rem; color: var(--text-dim); margin-top: 4px;
+        }
+
+        /* ---- 概率条 ---- */
+        .prob-list {
+            display: flex; flex-direction: column; gap: 8px;
+            max-width: 400px; margin: 16px auto 0;
+        }
+        .prob-item {
+            display: flex; align-items: center; gap: 12px;
+            font-size: 0.9rem;
+        }
+        .prob-label {
+            width: 40px; text-align: right; font-weight: 600; color: var(--text-dim);
+        }
+        .prob-bar-wrap {
+            flex: 1; height: 20px; background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px; overflow: hidden;
+        }
+        .prob-bar {
+            height: 100%; border-radius: 10px;
+            background: linear-gradient(90deg, #6366f1, #a78bfa);
+            transition: width 0.4s ease;
+            display: flex; align-items: center; justify-content: flex-end;
+            padding-right: 8px; font-size: 0.75rem; color: #fff; font-weight: 600;
+        }
+        .prob-item.active .prob-label { color: var(--primary-glow); }
+        .prob-item.active .prob-bar { background: linear-gradient(90deg, #22c55e, #4ade80); }
+
+        /* ---- 上传区域 ---- */
+        .upload-zone {
+            border: 2px dashed var(--border); border-radius: var(--radius);
+            padding: 60px 40px; text-align: center; cursor: pointer;
+            transition: var(--transition); position: relative;
+            background: rgba(99, 102, 241, 0.02);
+        }
+        .upload-zone:hover, .upload-zone.drag-over {
+            border-color: var(--primary); background: rgba(99, 102, 241, 0.08);
+        }
+        .upload-icon { font-size: 3rem; margin-bottom: 12px; }
+        .upload-text { font-size: 1rem; color: var(--text-dim); }
+        .upload-hint { font-size: 0.85rem; color: var(--text-dim); margin-top: 8px; opacity: 0.7; }
+        #upload-input { display: none; }
+
+        .preview-area {
+            margin-top: 16px; text-align: center;
+        }
+        .preview-img {
+            max-width: 200px; max-height: 200px; border-radius: var(--radius);
+            border: 2px solid var(--border); object-fit: cover;
+        }
+
+        /* ---- 状态指示 ---- */
+        .status-dot {
+            display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+            margin-right: 6px;
+        }
+        .status-dot.live { background: var(--success); animation: pulse 1.5s ease infinite; }
+        .status-dot.off { background: var(--danger); }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ---- 提示 ---- */
+        .toast {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: var(--surface); border: 1px solid var(--border);
+            color: var(--text); padding: 12px 24px; border-radius: 12px;
+            font-size: 0.9rem; z-index: 100; opacity: 0;
+            transition: opacity 0.3s ease; pointer-events: none;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        .toast.show { opacity: 1; }
+
+        @media (max-width: 640px) {
+            .header h1 { font-size: 1.5rem; }
+            .prediction-big { font-size: 3rem; }
+            .camera-wrapper { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- 背景粒子 -->
+<div class="bg-particles" id="bg-particles"></div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <h1>✋ 手势数字识别</h1>
+        <p>4层CNN · 测试准确率 97.92% | 支持摄像头实时识别 & 上传图片识别</p>
+    </div>
+
+    <!-- Tab -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="camera">
+            <span class="tab-icon">📷</span> 摄像头实时识别
+        </button>
+        <button class="tab-btn" data-tab="upload">
+            <span class="tab-icon">🖼️</span> 上传图片识别
+        </button>
+    </div>
+
+    <!-- ==================== 摄像头面板 ==================== -->
+    <div class="panel active" id="panel-camera">
+        <div class="card">
+            <div class="camera-wrapper">
+                <video id="camera-feed" autoplay playsinline></video>
+                <canvas id="camera-canvas" width="64" height="64"></canvas>
+                <div class="camera-overlay">
+                    <div class="roi-box"></div>
+                </div>
+            </div>
+            <div class="camera-controls">
+                <button class="btn btn-primary" id="btn-start-camera">📷 开启摄像头</button>
+                <button class="btn btn-outline" id="btn-capture">🔍 单次识别</button>
+                <button class="btn btn-outline" id="btn-auto-detect">
+                    <span class="status-dot off" id="auto-status-dot"></span>
+                    自动识别
+                </button>
+                <button class="btn btn-danger" id="btn-stop-camera" style="display:none;">⏹️ 关闭</button>
+            </div>
+
+            <!-- 结果 -->
+            <div class="result-area" id="camera-result" style="display:none;">
+                <div class="prediction-big" id="camera-pred">-</div>
+                <div class="confidence" id="camera-conf"></div>
+                <div class="prob-list" id="camera-probs"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 上传面板 ==================== -->
+    <div class="panel" id="panel-upload">
+        <div class="card">
+            <div class="upload-zone" id="upload-zone">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">点击或拖拽图片到此处</div>
+                <div class="upload-hint">支持 JPG / PNG / WebP，自动裁剪至 64×64</div>
+                <input type="file" id="upload-input" accept="image/*">
+            </div>
+            <div class="preview-area" id="preview-area" style="display:none;">
+                <img class="preview-img" id="preview-img" alt="预览">
+            </div>
+
+            <!-- 结果 -->
+            <div class="result-area" id="upload-result" style="display:none;">
+                <div class="prediction-big" id="upload-pred">-</div>
+                <div class="confidence" id="upload-conf"></div>
+                <div class="prob-list" id="upload-probs"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==================== 全局变量 ====================
+let videoStream = null;
+let autoDetectInterval = null;
+let isDetecting = false;
+
+// 背景粒子
+(function() {
+    const container = document.getElementById('bg-particles');
+    for (let i = 0; i < 20; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        const size = 2 + Math.random() * 6;
+        p.style.cssText = `
+            width: ${size}px; height: ${size}px;
+            left: ${Math.random() * 100}%;
+            top: ${Math.random() * 100}%;
+            animation-delay: ${Math.random() * 8}s;
+            animation-duration: ${6 + Math.random() * 8}s;
+        `;
+        container.appendChild(p);
+    }
+})();
+
+// ==================== Toast ====================
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ==================== Tab 切换 ====================
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        // 如果切换到其他 tab 且自动识别开着，先停掉
+        if (btn.dataset.tab === 'upload' && autoDetectInterval) {
+            stopAutoDetect();
+        }
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+    });
+});
+
+// ==================== 摄像头 ====================
+const cameraFeed = document.getElementById('camera-feed');
+const cameraCanvas = document.getElementById('camera-canvas');
+const btnStart = document.getElementById('btn-start-camera');
+const btnCapture = document.getElementById('btn-capture');
+const btnAuto = document.getElementById('btn-auto-detect');
+const btnStop = document.getElementById('btn-stop-camera');
+const autoDot = document.getElementById('auto-status-dot');
+
+async function startCamera() {
+    try {
+        videoStream = await navigator.mediaDevices.getUserMedia({
+            video: { width: 480, height: 480, facingMode: 'user' }
+        });
+        cameraFeed.srcObject = videoStream;
+        btnStart.style.display = 'none';
+        btnStop.style.display = 'inline-flex';
+        showToast('摄像头已开启');
+    } catch (err) {
+        showToast('无法访问摄像头: ' + err.message);
+    }
+}
+
+function stopCamera() {
+    if (videoStream) {
+        videoStream.getTracks().forEach(t => t.stop());
+        videoStream = null;
+    }
+    cameraFeed.srcObject = null;
+    stopAutoDetect();
+    btnStart.style.display = 'inline-flex';
+    btnStop.style.display = 'none';
+    document.getElementById('camera-result').style.display = 'none';
+    showToast('摄像头已关闭');
+}
+
+btnStart.addEventListener('click', startCamera);
+btnStop.addEventListener('click', stopCamera);
+
+// ---- 从视频截帧 ----
+function captureFrame() {
+    const ctx = cameraCanvas.getContext('2d');
+    // 截取视频中间的正方形区域
+    const size = Math.min(cameraFeed.videoWidth, cameraFeed.videoHeight);
+    const sx = (cameraFeed.videoWidth - size) / 2;
+    const sy = (cameraFeed.videoHeight - size) / 2;
+    ctx.drawImage(cameraFeed, sx, sy, size, size, 0, 0, 64, 64);
+    return cameraCanvas.toDataURL('image/jpeg', 0.9);
+}
+
+// ---- 发送到后端识别 ----
+async function predict(imageDataUrl) {
+    const blob = await (await fetch(imageDataUrl)).blob();
+    const formData = new FormData();
+    formData.append('image', blob, 'gesture.jpg');
+
+    const resp = await fetch('/predict', { method: 'POST', body: formData });
+    if (!resp.ok) throw new Error('识别失败');
+    return await resp.json();
+}
+
+function renderResult(data, predEl, confEl, probsEl) {
+    predEl.textContent = data.prediction;
+    confEl.textContent = `置信度 ${data.confidence}%`;
+
+    let html = '';
+    for (let i = 0; i < 6; i++) {
+        const prob = data.probabilities[i] * 100;
+        const isMax = i === data.prediction;
+        html += `
+            <div class="prob-item${isMax ? ' active' : ''}">
+                <span class="prob-label">${i}</span>
+                <div class="prob-bar-wrap">
+                    <div class="prob-bar" style="width:${prob}%">
+                        ${prob > 12 ? prob.toFixed(1) + '%' : ''}
+                    </div>
+                </div>
+            </div>`;
+    }
+    probsEl.innerHTML = html;
+}
+
+// ---- 单次识别 ----
+btnCapture.addEventListener('click', async () => {
+    if (!videoStream) { showToast('请先开启摄像头'); return; }
+    if (isDetecting) return;
+    isDetecting = true;
+
+    try {
+        const frame = captureFrame();
+        const data = await predict(frame);
+        document.getElementById('camera-result').style.display = 'block';
+        renderResult(data,
+            document.getElementById('camera-pred'),
+            document.getElementById('camera-conf'),
+            document.getElementById('camera-probs')
+        );
+    } catch (e) {
+        showToast('识别出错: ' + e.message);
+    }
+    isDetecting = false;
+});
+
+// ---- 自动识别 ----
+btnAuto.addEventListener('click', () => {
+    if (!videoStream) { showToast('请先开启摄像头'); return; }
+    if (autoDetectInterval) { stopAutoDetect(); return; }
+    startAutoDetect();
+});
+
+function startAutoDetect() {
+    autoDetectInterval = setInterval(async () => {
+        if (!videoStream || isDetecting) return;
+        isDetecting = true;
+        try {
+            const frame = captureFrame();
+            const data = await predict(frame);
+            document.getElementById('camera-result').style.display = 'block';
+            renderResult(data,
+                document.getElementById('camera-pred'),
+                document.getElementById('camera-conf'),
+                document.getElementById('camera-probs')
+            );
+        } catch (e) { /* 静默失败 */ }
+        isDetecting = false;
+    }, 500); // 每 500ms 识别一次
+
+    autoDot.classList.remove('off');
+    autoDot.classList.add('live');
+    btnAuto.innerHTML = '<span class="status-dot live"></span> 停止自动识别';
+    btnAuto.classList.add('btn-primary');
+    btnAuto.classList.remove('btn-outline');
+}
+
+function stopAutoDetect() {
+    if (autoDetectInterval) { clearInterval(autoDetectInterval); autoDetectInterval = null; }
+    autoDot.classList.remove('live');
+    autoDot.classList.add('off');
+    btnAuto.innerHTML = '<span class="status-dot off"></span> 自动识别';
+    btnAuto.classList.remove('btn-primary');
+    btnAuto.classList.add('btn-outline');
+}
+
+// ==================== 上传识别 ====================
+const uploadZone = document.getElementById('upload-zone');
+const uploadInput = document.getElementById('upload-input');
+const previewArea = document.getElementById('preview-area');
+const previewImg = document.getElementById('preview-img');
+
+uploadZone.addEventListener('click', () => uploadInput.click());
+uploadInput.addEventListener('change', handleUpload);
+
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) {
+        uploadInput.files = e.dataTransfer.files;
+        handleUpload();
+    }
+});
+
+async function handleUpload() {
+    const file = uploadInput.files[0];
+    if (!file) return;
+
+    // 预览
+    const reader = new FileReader();
+    reader.onload = e => {
+        previewImg.src = e.target.result;
+        previewArea.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+
+    // 发送识别
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+        const resp = await fetch('/predict', { method: 'POST', body: formData });
+        if (!resp.ok) throw new Error('识别失败');
+        const data = await resp.json();
+
+        document.getElementById('upload-result').style.display = 'block';
+        renderResult(data,
+            document.getElementById('upload-pred'),
+            document.getElementById('upload-conf'),
+            document.getElementById('upload-probs')
+        );
+    } catch (e) {
+        showToast('识别出错: ' + e.message);
+    }
+}
+</script>
+</body>
+</html>
